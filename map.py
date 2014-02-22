@@ -148,7 +148,6 @@ def create_map(starting_terrain, cols, lines, tileset="default"):
 	return new_map
 
 def configure_colors(tileset):
-	print curses.can_change_color()
 	color_map = {}
 	n = 1
 	k = 1
@@ -164,26 +163,61 @@ def main(screen):
 	size = int(sys.argv[1])
 
 	colors = configure_colors('default')
+	curses.mousemask(1)
 
 	import time
 	screen.leaveok(1)
-	curses.curs_set(2)
+	curses.curs_set(0)
 	cols = curses.tigetnum('cols')
 	lines = curses.tigetnum('lines')
 	w =  curses.newwin(lines, cols)
-
+	the_map = create_map('dirt', cols-2, lines-1)
+	for row in the_map:
+		for tile in row:
+			w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
+	w.refresh()
+	last_pos = (1,1)
+	last_key = ''
+	last_mouse = (0,0)
+	old_tile = None
 	while True:
+		ocols, olines = cols, lines
 		cols = curses.tigetnum('cols')
 		lines = curses.tigetnum('lines')
-		the_map = create_map('dirt', cols-2, lines-1)
-		for row in the_map:
-			for tile in row:
-				w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
-
+		if not (ocols, olines) == (cols, lines):
+			the_map = create_map('dirt', cols-2, lines-1)
+			for row in the_map:
+				for tile in row:
+					w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
 		w.border()
-		w.addstr(0,1, "Map %d" % count)
-		w.addstr(0,15, "%dx%d" % (cols, lines))
-		curses.setsyx(0,0)
+		w.addstr(0,1, "%dx%d" % (cols, lines))
+		ch = screen.getch()
+		if ch != -1:
+			last_key = ch
+		if ch == curses.KEY_MOUSE:
+			_, mx, my, _, _ = curses.getmouse()
+			y, x = screen.getyx() 
+			w.addstr(my, mx, 'M', curses.color_pair(8) | curses.A_BOLD)
+			last_mouse = (my, mx)
+		if ch == curses.KEY_ENTER:
+			last_pos = (10,10)
+		if ch == curses.KEY_UP:
+			old_tile = the_map[last_pos[0]][last_pos[1]]	
+			last_pos = last_pos[0]-1, last_pos[1]
+		if ch == curses.KEY_LEFT:
+			old_tile = the_map[last_pos[0]][last_pos[1]]	
+			last_pos = last_pos[0], last_pos[1]-1
+		if ch == curses.KEY_RIGHT:
+			old_tile = the_map[last_pos[0]][last_pos[1]]	
+			last_pos = last_pos[0], last_pos[1]+1
+		if ch == curses.KEY_DOWN:
+			old_tile = the_map[last_pos[0]][last_pos[1]]	
+			last_pos = last_pos[0]+1, last_pos[1]
+		w.addstr(0,10, str(last_key))
+		w.addstr(last_pos[0], last_pos[1], '@', curses.color_pair(0) | curses.A_BOLD)
+		if old_tile:
+			w.addstr(old_tile.y, old_tile.x, repr(old_tile), curses.color_pair(colors[old_tile.terrain]))
+		curses.setsyx(*last_mouse)
 		w.refresh()
 
 
@@ -193,3 +227,4 @@ if __name__ == '__main__':
 	sys.setrecursionlimit(2**20)
 	locale.setlocale(locale.LC_ALL,"")
 	curses.wrapper(main)
+
