@@ -51,6 +51,7 @@ class Tile(object):
 		"dirt": True,
 		"gravel": True,
 		"stone": True,
+		"road": True,
 	}
 
 	regional_probabilities = {
@@ -163,7 +164,7 @@ def main(screen):
 	size = int(sys.argv[1])
 
 	colors = configure_colors('default')
-	curses.mousemask(1)
+	curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED)
 
 	import time
 	screen.leaveok(1)
@@ -180,6 +181,7 @@ def main(screen):
 	last_key = ''
 	last_mouse = (0,0)
 	old_tile = None
+	switch_counter = 0
 	while True:
 		ocols, olines = cols, lines
 		cols = curses.tigetnum('cols')
@@ -195,34 +197,39 @@ def main(screen):
 		if ch != -1:
 			last_key = ch
 		if ch == curses.KEY_MOUSE:
-			_, mx, my, _, _ = curses.getmouse()
-			y, x = screen.getyx() 
-			w.addstr(my, mx, 'M', curses.color_pair(8) | curses.A_BOLD)
+			_, mx, my, _, bstate = curses.getmouse()
+			y, x = screen.getyx()
+			if (bstate & curses.BUTTON1_CLICKED):
+				tile = Tile((my, mx), Tile.terrain_types['default'].keys()[switch_counter % len(Tile.terrain_types['default'])]) 
+				the_map[my][mx] = tile
+				w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
+			#if (bstate & curses.BUTTON1_DOUBLE_CLICKED): 
+			#	w.addstr(my, mx, '#', curses.color_pair(0) | curses.A_BOLD)
+			#	the_map[my][mx].terrain = 'wall'
 			last_mouse = (my, mx)
-		if ch == curses.KEY_ENTER:
-			last_pos = (10,10)
+		if ch == ord('a'):
+			switch_counter +=1 
 		if ch == curses.KEY_UP:
-			old_tile = the_map[last_pos[0]][last_pos[1]]	
-			if the_map[last_pos[0]-1][last_pos[0]].is_passable():
+			if the_map[last_pos[0]-1][last_pos[1]].is_passable():
+				old_tile = the_map[last_pos[0]][last_pos[1]]	
 				last_pos = last_pos[0]-1, last_pos[1]
 		if ch == curses.KEY_LEFT:
-			old_tile = the_map[last_pos[0]][last_pos[1]]	
-			if the_map[last_pos[0]1][last_pos[0]-1].is_passable():
-			last_pos = last_pos[0], last_pos[1]-1
+			if the_map[last_pos[0]][last_pos[1]-1].is_passable():
+				old_tile = the_map[last_pos[0]][last_pos[1]]	
+				last_pos = last_pos[0], last_pos[1]-1
 		if ch == curses.KEY_RIGHT:
-			old_tile = the_map[last_pos[0]][last_pos[1]]	
-			if the_map[last_pos[0]][[last_pos[0]+1].is_passable():
-			last_pos = last_pos[0], last_pos[1]+1
+			if the_map[last_pos[0]][last_pos[1]+1].is_passable():
+				old_tile = the_map[last_pos[0]][last_pos[1]]	
+				last_pos = last_pos[0], last_pos[1]+1
 		if ch == curses.KEY_DOWN:
-			old_tile = the_map[last_pos[0]][last_pos[1]]	
-			if the_map[last_pos[0]+1][[last_pos[0]+1].is_passable():
+			if the_map[last_pos[0]+1][last_pos[1]].is_passable():
+				old_tile = the_map[last_pos[0]][last_pos[1]]	
 				last_pos = last_pos[0]+1, last_pos[1]
 			
 		w.addstr(0,10, str(last_key))
 		w.addstr(last_pos[0], last_pos[1], '@', curses.color_pair(0) | curses.A_BOLD)
 		if old_tile:
 			w.addstr(old_tile.y, old_tile.x, repr(old_tile), curses.color_pair(colors[old_tile.terrain]))
-		curses.setsyx(*last_mouse)
 		w.refresh()
 
 
