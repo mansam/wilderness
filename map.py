@@ -203,16 +203,21 @@ def main(screen):
 			last_pos = (10,10)
 		if ch == curses.KEY_UP:
 			old_tile = the_map[last_pos[0]][last_pos[1]]	
-			last_pos = last_pos[0]-1, last_pos[1]
+			if the_map[last_pos[0]-1][last_pos[0]].is_passable():
+				last_pos = last_pos[0]-1, last_pos[1]
 		if ch == curses.KEY_LEFT:
 			old_tile = the_map[last_pos[0]][last_pos[1]]	
+			if the_map[last_pos[0]1][last_pos[0]-1].is_passable():
 			last_pos = last_pos[0], last_pos[1]-1
 		if ch == curses.KEY_RIGHT:
 			old_tile = the_map[last_pos[0]][last_pos[1]]	
+			if the_map[last_pos[0]][[last_pos[0]+1].is_passable():
 			last_pos = last_pos[0], last_pos[1]+1
 		if ch == curses.KEY_DOWN:
 			old_tile = the_map[last_pos[0]][last_pos[1]]	
-			last_pos = last_pos[0]+1, last_pos[1]
+			if the_map[last_pos[0]+1][[last_pos[0]+1].is_passable():
+				last_pos = last_pos[0]+1, last_pos[1]
+			
 		w.addstr(0,10, str(last_key))
 		w.addstr(last_pos[0], last_pos[1], '@', curses.color_pair(0) | curses.A_BOLD)
 		if old_tile:
