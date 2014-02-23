@@ -164,12 +164,13 @@ def main(screen):
 	lines = curses.tigetnum('lines')
 	w =  curses.newwin(lines-2, cols-2, 1, 1)
 	the_map = Map(cols-3, lines-2)
+	the_map.array[0][0] = Tile((0,0), 'marker')
 	for row in the_map.array:
 		for tile in row:
 			w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
 	# w.refresh()
 	
-	last_pos = (1,1)
+	player = (1,1)
 	last_key = ''
 	last_mouse = (0,0)
 	old_tile = None
@@ -179,7 +180,8 @@ def main(screen):
 		cols = curses.tigetnum('cols')
 		lines = curses.tigetnum('lines')
 		if not (ocols, olines) == (cols, lines):
-			the_map = Map(cols-2, lines-1)
+			the_map = Map(cols-3, lines-2)
+			the_map.array[0][0] = Tile((0,0), 'marker')
 			for row in the_map.array:
 				for tile in row:
 					w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
@@ -191,31 +193,31 @@ def main(screen):
 			_, mx, my, _, bstate = curses.getmouse()
 			y, x = screen.getyx()
 			if (bstate & curses.BUTTON1_CLICKED):
-				tile = Tile((my+1, mx+1), the_map.selected_terrain) 
-				the_map.array[my+1][mx+1] = tile
+				tile = Tile((my-1, mx-1), the_map.selected_terrain) 
+				the_map.array[my-1][mx-1] = tile
 				w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
 			last_mouse = (my, mx)
 		if ch == ord('a'):
 			the_map.selected_terrain = the_map.terrain_cycle.next()
 		if ch == curses.KEY_UP:
-			if the_map.array[last_pos[0]-1][last_pos[1]].is_passable():
-				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
-				last_pos = last_pos[0]-1, last_pos[1]
+			if the_map.array[player[0]-1][player[1]].is_passable():
+				old_tile = the_map.array[player[0]][player[1]]	
+				player = player[0]-1, player[1]
 		if ch == curses.KEY_LEFT:
-			if the_map.array[last_pos[0]][last_pos[1]-1].is_passable():
-				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
-				last_pos = last_pos[0], last_pos[1]-1
+			if the_map.array[player[0]][player[1]-1].is_passable():
+				old_tile = the_map.array[player[0]][player[1]]	
+				player = player[0], player[1]-1
 		if ch == curses.KEY_RIGHT:
-			if the_map.array[last_pos[0]][last_pos[1]+1].is_passable():
-				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
-				last_pos = last_pos[0], last_pos[1]+1
+			if the_map.array[player[0]][player[1]+1].is_passable():
+				old_tile = the_map.array[player[0]][player[1]]	
+				player = player[0], player[1]+1
 		if ch == curses.KEY_DOWN:
-			if the_map.array[last_pos[0]+1][last_pos[1]].is_passable():
-				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
-				last_pos = last_pos[0]+1, last_pos[1]
+			if the_map.array[player[0]+1][player[1]].is_passable():
+				old_tile = the_map.array[player[0]][player[1]]	
+				player = player[0]+1, player[1]
 			
-		w.addstr(last_pos[0], last_pos[1], '@', curses.color_pair(0) | curses.A_BOLD)
-		screen.addstr(0,1, "%dx%d" % (cols, lines))
+		w.addstr(player[0], player[1], '@', curses.color_pair(0) | curses.A_BOLD)
+		screen.addstr(0,1, "%dx%d" % player)
 		screen.addstr(0,10, str(last_key))
 		screen.addstr(0, cols-2, Tile.get_symbol(the_map.selected_terrain), colors[the_map.selected_terrain])
 		if old_tile:
