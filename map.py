@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 import random
 import curses
-
+from itertools import cycle
 
 def weighted_choice(lst):
 	n = random.uniform(0, 1)
@@ -82,45 +82,38 @@ class Tile(object):
 	def __repr__(self):
 		return self.terrain_types[self.tileset][self.terrain][2]
 
+class Map(object):
 
-def get_adjacent(y_x, cols, lines):
-	"""
+	def __init__(self, cols, lines, starting_terrain="dirt", tileset="default"):
+		"""
+		Procedurally generate a map consisting of different biomes.
 
-	"""
+		"""
+		self.cols = cols
+		self.lines = lines
+		self.array = []
+		for y in range(0, lines):
+			row = []
+			for x in range(0, cols):
+				row.append(None)
+			self.array.append(row)
 
-	coords = []
-	y, x = y_x
-	for pair in ((y-1, x), (y, x-1), (y+1, x), (y, x+1)):
-			if pair[0] >= 0 and pair[0] < lines and pair[1] >= 0 and pair[1] < cols and pair != (y, x):
-				coords.append(pair)
-	return coords
+		modifier = .10
+		curr_tile = (0,0)
+		draw_prob = 4
 
-def create_map(starting_terrain, cols, lines, tileset="default"):
-	"""
-	Procedurally generate a map consisting of different biomes.
+		self._paint(curr_tile, starting_terrain, draw_prob, modifier)
+		# while queue:
+		# 	y_x = queue.pop(0)
+		# 	remaining, last_terrain, draw_prob, modifier = paint(new_map, y_x, last_terrain, draw_prob, modifier)
+		# 	queue += remaining
 
-	"""
-	
-
-	new_map = []
-	for y in range(0, lines):
-		row = []
-		for x in range(0, cols):
-			row.append(None)
-		new_map.append(row)
-
-	modifier = .10
-	curr_tile = (0,0)
-	draw_prob = 4
-
-	# new_map = Map(size)
-
-	def paint(map, y_x, terrain, prob, mod, iteration=0, queue=[], visited=[]):
+	def _paint(self, y_x, terrain, prob, mod, iteration=0, queue=[], visited=[]):
 		y, x = y_x
 		if random.random() <= prob:
 		
 			t = Tile((y, x), terrain)
-			map[y][x] = t
+			self.array[y][x] = t
 
 			prob -= mod
 			mod += .01
@@ -129,24 +122,28 @@ def create_map(starting_terrain, cols, lines, tileset="default"):
 		else:
 			terrain = weighted_choice(Tile.regional_probabilities[terrain])
 			t = Tile((y,x), terrain)
-			map[y][x] = t
+			self.array[y][x] = t
 			prob = 4
 			mod = .01
-		adj_list = get_adjacent((y, x), cols, lines)
+		adj_list = self.get_adjacent((y, x), self.cols, self.lines)
 		random.shuffle(adj_list)
 		iteration += 1
 		for pair in adj_list:
-			if not map[pair[0]][pair[1]]:
-				paint(map, pair, terrain, prob, mod, iteration)
+			if not self.array[pair[0]][pair[1]]:
+				self._paint(pair, terrain, prob, mod, iteration)
 				
 
-	# doing this iteratively results in ugly maps
-	paint(new_map, curr_tile, starting_terrain, draw_prob, modifier)
-	# while queue:
-	# 	y_x = queue.pop(0)
-	# 	remaining, last_terrain, draw_prob, modifier = paint(new_map, y_x, last_terrain, draw_prob, modifier)
-	# 	queue += remaining
-	return new_map
+	def get_adjacent(self, y_x, cols, lines):
+		"""
+
+		"""
+
+		coords = []
+		y, x = y_x
+		for pair in ((y-1, x), (y, x-1), (y+1, x), (y, x+1)):
+				if pair[0] >= 0 and pair[0] < lines and pair[1] >= 0 and pair[1] < cols and pair != (y, x):
+					coords.append(pair)
+		return coords
 
 def configure_colors(tileset):
 	color_map = {}
@@ -161,34 +158,35 @@ def configure_colors(tileset):
 
 def main(screen):
 
-	size = int(sys.argv[1])
+	screen.leaveok(1)
+	curses.curs_set(0)
 
 	colors = configure_colors('default')
 	curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED)
 
-	import time
-	screen.leaveok(1)
-	curses.curs_set(0)
 	cols = curses.tigetnum('cols')
 	lines = curses.tigetnum('lines')
 	w =  curses.newwin(lines, cols)
-	the_map = create_map('dirt', cols-2, lines-1)
-	for row in the_map:
+	the_map = Map(cols-2, lines-1)
+	for row in the_map.array:
 		for tile in row:
 			w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
 	w.refresh()
+	
 	last_pos = (1,1)
 	last_key = ''
 	last_mouse = (0,0)
 	old_tile = None
-	switch_counter = 0
+	paint_terrain = 'dirt'
+	terrain_types = cycle(Tile.terrain_types['default'])
+	
 	while True:
 		ocols, olines = cols, lines
 		cols = curses.tigetnum('cols')
 		lines = curses.tigetnum('lines')
 		if not (ocols, olines) == (cols, lines):
-			the_map = create_map('dirt', cols-2, lines-1)
-			for row in the_map:
+			the_map = Map(cols-2, lines-1)
+			for row in the_map.array:
 				for tile in row:
 					w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
 		w.border()
@@ -200,34 +198,32 @@ def main(screen):
 			_, mx, my, _, bstate = curses.getmouse()
 			y, x = screen.getyx()
 			if (bstate & curses.BUTTON1_CLICKED):
-				tile = Tile((my, mx), Tile.terrain_types['default'].keys()[switch_counter % len(Tile.terrain_types['default'])]) 
-				the_map[my][mx] = tile
+				tile = Tile((my, mx), paint_terrain) 
+				the_map.array[my][mx] = tile
 				w.addstr(tile.y, tile.x, repr(tile), curses.color_pair(colors[tile.terrain]))
-			#if (bstate & curses.BUTTON1_DOUBLE_CLICKED): 
-			#	w.addstr(my, mx, '#', curses.color_pair(0) | curses.A_BOLD)
-			#	the_map[my][mx].terrain = 'wall'
 			last_mouse = (my, mx)
 		if ch == ord('a'):
-			switch_counter +=1 
+			paint_terrain = terrain_types.next()
 		if ch == curses.KEY_UP:
-			if the_map[last_pos[0]-1][last_pos[1]].is_passable():
-				old_tile = the_map[last_pos[0]][last_pos[1]]	
+			if the_map.array[last_pos[0]-1][last_pos[1]].is_passable():
+				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
 				last_pos = last_pos[0]-1, last_pos[1]
 		if ch == curses.KEY_LEFT:
-			if the_map[last_pos[0]][last_pos[1]-1].is_passable():
-				old_tile = the_map[last_pos[0]][last_pos[1]]	
+			if the_map.array[last_pos[0]][last_pos[1]-1].is_passable():
+				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
 				last_pos = last_pos[0], last_pos[1]-1
 		if ch == curses.KEY_RIGHT:
-			if the_map[last_pos[0]][last_pos[1]+1].is_passable():
-				old_tile = the_map[last_pos[0]][last_pos[1]]	
+			if the_map.array[last_pos[0]][last_pos[1]+1].is_passable():
+				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
 				last_pos = last_pos[0], last_pos[1]+1
 		if ch == curses.KEY_DOWN:
-			if the_map[last_pos[0]+1][last_pos[1]].is_passable():
-				old_tile = the_map[last_pos[0]][last_pos[1]]	
+			if the_map.array[last_pos[0]+1][last_pos[1]].is_passable():
+				old_tile = the_map.array[last_pos[0]][last_pos[1]]	
 				last_pos = last_pos[0]+1, last_pos[1]
 			
 		w.addstr(0,10, str(last_key))
 		w.addstr(last_pos[0], last_pos[1], '@', curses.color_pair(0) | curses.A_BOLD)
+		w.addstr(0, cols-2, Tile.terrain_types['default'][paint_terrain][2], curses.color_pair(colors[paint_terrain]))
 		if old_tile:
 			w.addstr(old_tile.y, old_tile.x, repr(old_tile), curses.color_pair(colors[old_tile.terrain]))
 		w.refresh()
