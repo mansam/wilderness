@@ -1,7 +1,16 @@
 # -*- encoding: utf-8 -*-
 import random
 import curses
+import time
+import sys
+import threading
 from itertools import cycle
+
+MOVE_KEYS = {}
+MOVE_KEYS['N'] = [ord('k'), curses.KEY_UP]
+MOVE_KEYS['S'] = [ord('j'), curses.KEY_DOWN]
+MOVE_KEYS['W'] = [ord('h'), curses.KEY_LEFT]
+MOVE_KEYS['E'] = [ord('l'), curses.KEY_RIGHT]
 
 def weighted_choice(lst):
 	n = random.uniform(0, 1)
@@ -78,9 +87,17 @@ class Tile(object):
 	def __repr__(self):
 		return Tile.get_symbol(self.terrain)
 
+class Entity(object):
+
+	def __init__(self, coords):
+		y, x = coords
+		self.y = y
+		self.x = x
+		self.ghost = False
+
 class Map(object):
 
-	def __init__(self, cols, lines, default_terrain="dirt", tileset="default"):
+	def __init__(self, cols, lines, default_terrain="dirt", tileset="default", starting_coords=(1,1)):
 		"""
 		Procedurally generate a map consisting of different biomes.
 
@@ -88,10 +105,12 @@ class Map(object):
 		self.cols = cols
 		self.lines = lines
 		self.array = []
+		self.entities = []
 		self.tileset = tileset
 		self.default_terrain = default_terrain
 		self.terrain_cycle = cycle(Tile.terrain_types['default'])
 		self.selected_terrain = self.default_terrain
+		self.starting_coords = starting_coords
 		for y in range(0, lines):
 			row = []
 			for x in range(0, cols):
@@ -140,6 +159,22 @@ class Map(object):
 					coords.append(pair)
 		return coords
 
+	def move_n(self, entity):
+		if (entity.y-1 >= 0 and (self.array[entity.y-1][entity.x].is_passable() or entity.ghost)):
+			entity.y -= 1
+
+	def move_s(self, entity):
+		if (entity.y+1 < self.lines and (self.array[entity.y+1][entity.x].is_passable() or entity.ghost)):
+			entity.y += 1
+
+	def move_w(self, entity):
+		if (entity.x-1 >= 0 and (self.array[entity.y][entity.x-1].is_passable() or entity.ghost)):
+			entity.x -= 1
+
+	def move_e(self, entity):
+		if (entity.x+1 < self.cols and (self.array[entity.y][entity.x+1].is_passable() or entity.ghost)):
+			entity.x += 1
+
 def configure_colors(tileset):
 	color_map = {}
 	n = 1
@@ -154,7 +189,7 @@ def configure_colors(tileset):
 def main(screen):
 
 	screen.leaveok(1)
-	screen.border()
+	screen.nodelay(11)
 	curses.curs_set(0)
 
 	colors = configure_colors('default')
@@ -169,12 +204,19 @@ def main(screen):
 		for tile in row:
 			w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
 	# w.refresh()
-	
-	player = (1,1)
-	last_key = ''
+
+	game = GameState()
+	screen.border()
+
 	last_mouse = (0,0)
-	old_tile = None
-	
+	player = Entity(the_map.starting_coords)
+	cursor = Entity(the_map.starting_coords)
+	cursor.ghost = True
+	test_beast = Entity((4,4))
+	beast_thread = threading.Thread(target=rove, args=(test_beast, the_map))
+	beast_thread.daemon = True
+	beast_thread.start()
+
 	while True:
 		ocols, olines = cols, lines
 		cols = curses.tigetnum('cols')
@@ -182,52 +224,99 @@ def main(screen):
 		if not (ocols, olines) == (cols, lines):
 			the_map = Map(cols-3, lines-2)
 			the_map.array[0][0] = Tile((0,0), 'marker')
-			for row in the_map.array:
-				for tile in row:
-					w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
-		
+
+		for row in the_map.array:
+			for tile in row:
+				w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
+	
 		ch = screen.getch()
-		if ch != -1:
-			last_key = ch
 		if ch == curses.KEY_MOUSE:
 			_, mx, my, _, bstate = curses.getmouse()
 			y, x = screen.getyx()
 			if (bstate & curses.BUTTON1_CLICKED):
-				tile = Tile((my-1, mx-1), the_map.selected_terrain) 
-				the_map.array[my-1][mx-1] = tile
-				w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
+				if (-1 < mx-1 < the_map.cols) and (-1 < my-1 < the_map.lines):
+					tile = Tile((my-1, mx-1), the_map.selected_terrain) 
+					the_map.array[my-1][mx-1] = tile
+					w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])
 			last_mouse = (my, mx)
+		if ch == ord(' '):
+			if game.mode == game.MODE_DRAW:
+				tile = Tile((cursor.y, cursor.x), the_map.selected_terrain) 
+				the_map.array[cursor.y][cursor.x] = tile
+				w.addstr(tile.y, tile.x, repr(tile), colors[tile.terrain])			
 		if ch == ord('a'):
 			the_map.selected_terrain = the_map.terrain_cycle.next()
-		if ch == curses.KEY_UP:
-			if the_map.array[player[0]-1][player[1]].is_passable():
-				old_tile = the_map.array[player[0]][player[1]]	
-				player = player[0]-1, player[1]
-		if ch == curses.KEY_LEFT:
-			if the_map.array[player[0]][player[1]-1].is_passable():
-				old_tile = the_map.array[player[0]][player[1]]	
-				player = player[0], player[1]-1
-		if ch == curses.KEY_RIGHT:
-			if the_map.array[player[0]][player[1]+1].is_passable():
-				old_tile = the_map.array[player[0]][player[1]]	
-				player = player[0], player[1]+1
-		if ch == curses.KEY_DOWN:
-			if the_map.array[player[0]+1][player[1]].is_passable():
-				old_tile = the_map.array[player[0]][player[1]]	
-				player = player[0]+1, player[1]
-			
-		w.addstr(player[0], player[1], '@', curses.color_pair(0) | curses.A_BOLD)
-		screen.addstr(0,1, "%dx%d" % player)
-		screen.addstr(0,10, str(last_key))
-		screen.addstr(0, cols-2, Tile.get_symbol(the_map.selected_terrain), colors[the_map.selected_terrain])
-		if old_tile:
-			w.addstr(old_tile.y, old_tile.x, repr(old_tile), colors[old_tile.terrain])
-		w.refresh()
+		if ch == ord('q'):
+			sys.exit(0)
+		if ch == ord('\t'):
+			game.next_mode()
+		if ch == 27:
+			game.reset_mode()
 
+		if game.mode == game.MODE_PLAYER:
+			cursor.y = player.y
+			cursor.x = player.x
+			move(the_map, ch, player)
+		move(the_map, ch, cursor)
+		
+		w.addstr(player.y, player.x, '@', curses.color_pair(0) | curses.A_BOLD)
+		w.addstr(test_beast.y, test_beast.x, 'h', colors['water'])
+
+		screen.addstr(0,1, "%dx%d" % (player.y, player.x))
+		screen.addstr(0,8, game.MODE_LABELS[game.mode])
+		screen.addstr(0, cols-2, Tile.get_symbol(the_map.selected_terrain), colors[the_map.selected_terrain])
+		if game.draw_cursor:
+			w.chgat(cursor.y, cursor.x, 1, curses.A_STANDOUT)
+
+		w.refresh()
+		screen.refresh()
+
+def move(the_map, dir, entity):
+	if dir in MOVE_KEYS['N']:
+		the_map.move_n(entity)
+	if dir in MOVE_KEYS['S']:
+		the_map.move_s(entity)
+	if dir in MOVE_KEYS['E']:
+		the_map.move_e(entity)
+	if dir in MOVE_KEYS['W']:
+		the_map.move_w(entity)
+
+def rove(entity, the_map):
+	directions = [curses.KEY_UP, curses.KEY_DOWN, curses.KEY_LEFT, curses.KEY_RIGHT]
+	while True:
+		time.sleep(.25)
+		move(the_map, random.choice(directions), entity)
+
+class GameState(object):
+
+	MODE_PLAYER = 0
+	MODE_DRAW = 1
+	MODE_LOOK = 2
+
+	MODE_LABELS = {
+		MODE_PLAYER: "Play",
+		MODE_DRAW: "Draw",
+		MODE_LOOK: "Look"
+	}
+
+	def __init__(self):
+		self.mode = self.MODE_PLAYER
+		self.modes = cycle([self.MODE_DRAW, self.MODE_LOOK, self.MODE_PLAYER])
+		self.draw_cursor = False
+
+	def next_mode(self):
+		self.mode = next(self.modes)
+		if self.mode == self.MODE_PLAYER:
+			self.draw_cursor = False
+		else:
+			self.draw_cursor = True
+
+	def reset_mode(self):
+		while self.mode != self.MODE_PLAYER:
+			self.next_mode()
 
 if __name__ == '__main__':
 	import locale
-	import sys
 	sys.setrecursionlimit(2**20)
 	locale.setlocale(locale.LC_ALL,"")
 	curses.wrapper(main)
