@@ -101,7 +101,7 @@ class Engine(object):
 			if not (ocols, olines) == (cols, lines):
 				the_map = Map(cols-3, lines-6)
 				the_map.array[0][0] = Tile((0,0), 'marker')
-			# self.draw_map()
+			self.draw_map()
 			self.handle_input()
 			self.update_displays()
 
@@ -224,7 +224,6 @@ class CursesTerminal(object):
 		self.status_window.refresh()
 
 	def draw_entity_status(self, window, entity):
-		window.addstr(0,1, " %s - %s " % (entity.symbol, entity.name), entity.color)
 		window.addstr(1,2, "HP:")
 		window.addstr(1,6, ("%d" % entity.hp).rjust(2), self.colors['grass'])
 		window.addstr(1,10, "STR:", self.colors['dirt'])
@@ -245,10 +244,11 @@ class CursesTerminal(object):
 		player = self.engine.player
 		cursor = self.engine.cursor
 		if self.engine.mode == Mode.PLAYER:
-			self.draw(self.screen, (0,1), "%dx%d" % (player.y, player.x), self.colors['wall'])
+			self.draw(self.screen, (0,1), "%sx%s" % (str(player.y).zfill(3), str(player.x).zfill(3)), self.colors['wall'])
 		else:
-			self.draw(self.screen, (0,1), "%dx%d" % (cursor.y, cursor.x), self.colors['wall'])		
-		self.draw(self.screen, (0,8), self.engine.mode, self.colors['wall'])
+			self.draw(self.screen, (0,1), "%sx%s" % (str(cursor.y).zfill(3), str(cursor.x).zfill(3)), self.colors['wall'])		
+		self.draw(self.screen, (0,15), self.engine.mode, self.colors['wall'])
+
 
 		if self.engine.mode == Mode.DRAW:
 			# draw the current selected drawing tile
@@ -256,8 +256,9 @@ class CursesTerminal(object):
 			self.draw(self.screen, (0, self.cols-2), symbol, self.colors[self.engine.the_map.selected_terrain])
 
 		# draw player
-		py_px = (player.y, player.x)
-		self.draw(self.main_window, py_px, player.symbol, player.color | curses.A_BOLD)
+		py_px = (player.y+1, player.x+1)
+		self.draw(self.screen, (0, 20), player.symbol, player.color)
+		self.draw(self.screen, py_px, player.symbol, player.color | curses.A_BOLD)
 
 		if self.engine.draw_cursor:
 			self.main_window.chgat(cursor.y, cursor.x, 1, curses.A_STANDOUT)
@@ -294,7 +295,7 @@ class CursesInput(object):
 	VIM_KEYS = [ord(c) for c in "yubnhjkl"]
 	ARROW_KEYS = [curses.KEY_UP, curses.KEY_DOWN, curses.KEY_LEFT, curses.KEY_RIGHT]
 	MOVE_KEYS = VIM_KEYS + ARROW_KEYS
-	UI_KEYS = [ord(' '), '\t', 27, ord('a'), ord('q')]
+	UI_KEYS = [ord(' '), '\t', 27, ord('a'), ord('q'), ord('x')]
 
 	def __init__(self, engine, screen, listens_to=MOVE_KEYS + UI_KEYS):
 		self.engine = engine
@@ -308,7 +309,6 @@ class CursesInput(object):
 	def handle_input(self, ch):
 		if not ch in self.listens_to:
 			return
-		print(len(self.handlers))
 		for handler in self.handlers:
 			handler(ch)
 
@@ -326,7 +326,7 @@ class CursesInput(object):
 
 def initialize(screen):
 	screen.leaveok(1)
-	screen.nodelay(11)
+	# screen.nodelay(11)
 	curses.curs_set(0)
 	curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED)
 	engine = Engine(screen)
